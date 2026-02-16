@@ -133,6 +133,7 @@ def status():
         "current_url": CURRENT_URL,
         "last_code": last[0],
         "last_url": last[1],
+        "total": len(codes),
         "codes": codes,
         "logs": LOGS[-20:]
     })
