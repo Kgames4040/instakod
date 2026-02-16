@@ -93,8 +93,16 @@ def scan_domain(domain):
     (code, source_url) listesi döndürür.
     """
 
+    
+  print("SCAN_DOMAIN BAŞLADI")
+
     found_codes = []
     seen_codes = set()
+
+    urls = get_all_urls(domain)
+
+    print("URL SAYISI:", len(urls))  
+    
 
     urls = get_all_urls(domain)
 
