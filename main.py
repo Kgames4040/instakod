@@ -3,7 +3,7 @@ import psycopg2
 import os
 import threading
 from datetime import datetime
-from scanner import scan_domain
+from scanner import get_all_urls, scan_page
 
 app = Flask(__name__)
 
@@ -85,7 +85,7 @@ def get_all_codes():
     conn.close()
     return rows
 
-# ---------------- SCANNER (MANUEL) ----------------
+# ---------------- SCANNER ----------------
 
 def run_scan():
     global SCANNING, CURRENT_URL, LOGS
@@ -97,26 +97,33 @@ def run_scan():
     LOGS.append("Tarama başlatıldı...")
 
     try:
-        results = scan_domain(TARGET_DOMAIN)
+        urls = get_all_urls(TARGET_DOMAIN)
 
-        for code, url in results:
+        for url in urls:
 
             CURRENT_URL = url
+            LOGS.append(f"Taranıyor: {url}")
 
-            if not url_already_scanned(url):
-                save_code(code, url)
-                mark_url_scanned(url)
-                LOGS.append(f"Yeni kod: {code} ({url})")
-            else:
-                LOGS.append(f"Atlandı (zaten taranmış): {url}")
+            if url_already_scanned(url):
+                LOGS.append("Atlandı (zaten taranmış)")
+                continue
+
+            result = scan_page(url)
+
+            if result:
+                code, source_url = result
+                save_code(code, source_url)
+                LOGS.append(f"Yeni kod bulundu: {code}")
+
+            mark_url_scanned(url)
+
+        LOGS.append("Tarama tamamlandı.")
 
     except Exception as e:
         LOGS.append(f"Hata: {e}")
 
     SCANNING = False
-
-    # Logları 100 satırla sınırla
-    LOGS = LOGS[-100:]
+    LOGS = LOGS[-100:]  # Son 100 log tutulur
 
 # ---------------- ROUTES ----------------
 
@@ -147,6 +154,7 @@ def status():
 @app.route("/download")
 def download():
     codes = get_all_codes()
+
     with open("codes.txt", "w") as f:
         for code, url in codes:
             f.write(f"{code} - {url}\n")
