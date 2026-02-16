@@ -2,7 +2,6 @@ from flask import Flask, render_template, jsonify, send_file
 import psycopg2
 import os
 import threading
-import time
 from datetime import datetime
 from scanner import scan_domain
 
@@ -18,7 +17,7 @@ LOGS = []
 # ---------------- DATABASE ----------------
 
 def get_connection():
-    return psycopg2.connect(DATABASE_URL)
+    return psycopg2.connect(DATABASE_URL, sslmode="require")
 
 def init_db():
     conn = get_connection()
@@ -55,25 +54,23 @@ def url_already_scanned(url):
 def mark_url_scanned(url):
     conn = get_connection()
     cur = conn.cursor()
-    try:
-        cur.execute("INSERT INTO scanned_urls (url, scanned_at) VALUES (%s, %s)",
-                    (url, datetime.utcnow()))
-        conn.commit()
-    except:
-        pass
+    cur.execute("""
+        INSERT INTO scanned_urls (url, scanned_at)
+        VALUES (%s, %s)
+        ON CONFLICT (url) DO NOTHING
+    """, (url, datetime.utcnow()))
+    conn.commit()
     conn.close()
 
 def save_code(code, url):
     conn = get_connection()
     cur = conn.cursor()
-    try:
-        cur.execute("""
-            INSERT INTO codes (code, source_url, created_at)
-            VALUES (%s, %s, %s)
-        """, (code, url, datetime.utcnow()))
-        conn.commit()
-    except:
-        pass
+    cur.execute("""
+        INSERT INTO codes (code, source_url, created_at)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (code) DO NOTHING
+    """, (code, url, datetime.utcnow()))
+    conn.commit()
     conn.close()
 
 def get_all_codes():
@@ -88,40 +85,49 @@ def get_all_codes():
     conn.close()
     return rows
 
-# ---------------- SCANNER LOOP ----------------
+# ---------------- SCANNER (MANUEL) ----------------
 
-def scanner_loop():
-    global SCANNING, CURRENT_URL
+def run_scan():
+    global SCANNING, CURRENT_URL, LOGS
 
-    while True:
-        SCANNING = True
-        CURRENT_URL = TARGET_DOMAIN
-        LOGS.append(f"Tarama başladı: {TARGET_DOMAIN}")
+    if SCANNING:
+        return
 
-        try:
-            if not url_already_scanned(TARGET_DOMAIN):
-                results = scan_domain(TARGET_DOMAIN)
+    SCANNING = True
+    LOGS.append("Tarama başlatıldı...")
 
-                for code, url in results:
-                    save_code(code, url)
-                    LOGS.append(f"Yeni kod: {code} ({url})")
+    try:
+        results = scan_domain(TARGET_DOMAIN)
 
-                mark_url_scanned(TARGET_DOMAIN)
-                LOGS.append("URL işaretlendi (tekrar taranmayacak)")
+        for code, url in results:
+
+            CURRENT_URL = url
+
+            if not url_already_scanned(url):
+                save_code(code, url)
+                mark_url_scanned(url)
+                LOGS.append(f"Yeni kod: {code} ({url})")
             else:
-                LOGS.append("Bu URL daha önce tarandı, atlandı.")
+                LOGS.append(f"Atlandı (zaten taranmış): {url}")
 
-        except Exception as e:
-            LOGS.append(f"Hata: {e}")
+    except Exception as e:
+        LOGS.append(f"Hata: {e}")
 
-        SCANNING = False
-        time.sleep(300)
+    SCANNING = False
+
+    # Logları 100 satırla sınırla
+    LOGS = LOGS[-100:]
 
 # ---------------- ROUTES ----------------
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/start")
+def start_scan():
+    threading.Thread(target=run_scan).start()
+    return jsonify({"status": "started"})
 
 @app.route("/status")
 def status():
@@ -135,7 +141,7 @@ def status():
         "last_url": last[1],
         "total": len(codes),
         "codes": codes,
-        "logs": LOGS[-20:]
+        "logs": LOGS
     })
 
 @app.route("/download")
@@ -149,9 +155,8 @@ def download():
 
 # ---------------- START ----------------
 
-if __name__ == "__main__":
-    init_db()
-    threading.Thread(target=scanner_loop, daemon=True).start()
+init_db()
 
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
