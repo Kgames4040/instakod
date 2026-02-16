@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Scanner Control Panel</title>
+    <title>İNSTA KOD</title>
 
     <style>
         body {
@@ -141,37 +141,43 @@ function updatePanel() {
         .then(res => res.json())
         .then(data => {
 
+            // Durum
             document.getElementById("scanStatus").innerText =
-                data.scanning ? "AKTİF" : "BEKLİYOR";
+                data.scanning ? "AKTİF TARAMA" : "BEKLİYOR";
 
+            // Aktif URL
             document.getElementById("currentUrl").innerText =
                 data.current_url || "Yok";
 
+            // Son bulunan
             document.getElementById("lastCode").innerText =
                 data.last_code || "Yok";
 
             document.getElementById("lastUrl").innerText =
                 data.last_url || "Yok";
 
-            // 🔥 TOPLAM SAYAÇ
+            // Toplam sayaç
             document.getElementById("totalCount").innerText =
                 data.total;
 
-            // Loglar
+            // Son 30 log (RAM şişmesin diye)
             document.getElementById("logs").innerHTML =
-                data.logs.map(l => "<div class='log'>• " + l + "</div>").join("");
+                data.logs.slice(-30).map(l =>
+                    "<div class='log'>• " + l + "</div>"
+                ).join("");
 
-            // Kod listesi
+            // 🔥 SADECE KOD GÖSTER (URL YOK)
             document.getElementById("allCodes").innerHTML =
                 data.codes.map(c =>
                     "<div class='code-item'>" +
-                    c[0] + " - " + c[1] +
+                    c[0] +
                     "</div>"
                 ).join("");
         });
 }
 
-setInterval(updatePanel, 3000);
+// 1 saniyede bir güncelle (daha akıcı)
+setInterval(updatePanel, 1000);
 updatePanel();
 
 </script>
