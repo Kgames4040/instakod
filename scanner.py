@@ -88,6 +88,7 @@ def scan_domain(domain):
     print("URL SAYISI:", len(urls))
 
     for url in urls:
+       print("Taranıyor:", url)
         result = scan_page(url)
 
         if result:
