@@ -157,7 +157,7 @@ def download():
 
     with open("codes.txt", "w") as f:
         for code, url in codes:
-            f.write(f"{code} - {url}\n")
+            f.write(f"{code}\n")
 
     return send_file("codes.txt", as_attachment=True)
 
