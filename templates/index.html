@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scanner Control Panel</title>
+
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            color: #00ff88;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .top {
+            display: flex;
+            height: 50%;
+            border-bottom: 1px solid #00ff88;
+        }
+
+        .left, .right {
+            width: 50%;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .left {
+            border-right: 1px solid #00ff88;
+        }
+
+        .bottom {
+            height: 50%;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        h2 {
+            color: #00ffcc;
+            margin-top: 0;
+        }
+
+        .box {
+            border: 1px solid #00ff88;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .log {
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+
+        .code-item {
+            padding: 5px;
+            border-bottom: 1px solid #003322;
+        }
+
+        button {
+            background: #00ff88;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            background: #00ffaa;
+        }
+
+        .highlight {
+            color: #00ffff;
+            font-weight: bold;
+        }
+
+        .counter {
+            font-size: 22px;
+            color: #00ff00;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="top">
+
+    <!-- SOL PANEL -->
+    <div class="left">
+        <h2>CANLI TARAYICI</h2>
+
+        <div class="box">
+            <p>Durum:
+                <span id="scanStatus" class="highlight"></span>
+            </p>
+            <p>Aktif URL:
+                <span id="currentUrl" class="highlight"></span>
+            </p>
+            <p>Toplam Kod:
+                <span id="totalCount" class="counter">0</span>
+            </p>
+        </div>
+
+        <h3>Log Akışı</h3>
+        <div id="logs"></div>
+    </div>
+
+    <!-- SAĞ PANEL -->
+    <div class="right">
+        <h2>SON BULUNAN</h2>
+
+        <div class="box">
+            <p>Kod:
+                <span id="lastCode" class="highlight"></span>
+            </p>
+            <p>Bulunduğu URL:
+                <span id="lastUrl" class="highlight"></span>
+            </p>
+        </div>
+    </div>
+
+</div>
+
+<!-- ALT PANEL -->
+<div class="bottom">
+    <h2>TÜM KODLAR</h2>
+
+    <button onclick="window.location='/download'">
+        Tüm Kodları İndir
+    </button>
+
+    <div id="allCodes"></div>
+</div>
+
+<script>
+
+function updatePanel() {
+    fetch("/status")
+        .then(res => res.json())
+        .then(data => {
+
+            document.getElementById("scanStatus").innerText =
+                data.scanning ? "AKTİF" : "BEKLİYOR";
+
+            document.getElementById("currentUrl").innerText =
+                data.current_url || "Yok";
+
+            document.getElementById("lastCode").innerText =
+                data.last_code || "Yok";
+
+            document.getElementById("lastUrl").innerText =
+                data.last_url || "Yok";
+
+            // 🔥 TOPLAM SAYAÇ
+            document.getElementById("totalCount").innerText =
+                data.total;
+
+            // Loglar
+            document.getElementById("logs").innerHTML =
+                data.logs.map(l => "<div class='log'>• " + l + "</div>").join("");
+
+            // Kod listesi
+            document.getElementById("allCodes").innerHTML =
+                data.codes.map(c =>
+                    "<div class='code-item'>" +
+                    c[0] + " - " + c[1] +
+                    "</div>"
+                ).join("");
+        });
+}
+
+setInterval(updatePanel, 3000);
+updatePanel();
+
+</script>
+
+</body>
+</html>
