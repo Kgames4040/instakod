@@ -97,6 +97,6 @@ def scan_domain(domain):
                 seen_codes.add(code)
                 found_codes.append((code, source_url))
 
-        time.sleep(0.5)
+        time.sleep(0.05)
 
     return found_codes
