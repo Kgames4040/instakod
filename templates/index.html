@@ -95,11 +95,22 @@
             <p>Durum:
                 <span id="scanStatus" class="highlight"></span>
             </p>
+
             <p>Aktif URL:
                 <span id="currentUrl" class="highlight"></span>
             </p>
+
             <p>Toplam Kod:
                 <span id="totalCount" class="counter">0</span>
+            </p>
+
+            <!-- 🔥 YENİ EKLENDİ -->
+            <p>Toplam Sitemap URL:
+                <span id="totalUrls" class="counter">0</span>
+            </p>
+
+            <p>İlerleme:
+                <span id="progress" class="highlight">0 / 0</span>
             </p>
         </div>
 
@@ -115,6 +126,7 @@
             <p>Kod:
                 <span id="lastCode" class="highlight"></span>
             </p>
+
             <p>Bulunduğu URL:
                 <span id="lastUrl" class="highlight"></span>
             </p>
@@ -156,19 +168,27 @@ function updatePanel() {
             document.getElementById("lastUrl").innerText =
                 data.last_url || "Yok";
 
-            // Toplam sayaç
+            // Kod sayacı
             document.getElementById("totalCount").innerText =
-                data.total;
+                data.total || 0;
 
-            // Son 30 log (RAM şişmesin diye)
+            // 🔥 Sitemap URL sayısı
+            document.getElementById("totalUrls").innerText =
+                data.total_urls || 0;
+
+            // 🔥 İlerleme
+            document.getElementById("progress").innerText =
+                (data.current_index || 0) + " / " + (data.total_urls || 0);
+
+            // Son 30 log
             document.getElementById("logs").innerHTML =
-                data.logs.slice(-30).map(l =>
+                (data.logs || []).slice(-30).map(l =>
                     "<div class='log'>• " + l + "</div>"
                 ).join("");
 
-            // 🔥 SADECE KOD GÖSTER (URL YOK)
+            // Alt panel sadece kod
             document.getElementById("allCodes").innerHTML =
-                data.codes.map(c =>
+                (data.codes || []).map(c =>
                     "<div class='code-item'>" +
                     c[0] +
                     "</div>"
@@ -176,7 +196,7 @@ function updatePanel() {
         });
 }
 
-// 1 saniyede bir güncelle (daha akıcı)
+// 1 saniyede bir güncelle
 setInterval(updatePanel, 1000);
 updatePanel();
 
