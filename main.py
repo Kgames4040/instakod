@@ -2,6 +2,7 @@ from flask import Flask, render_template, jsonify, send_file
 import psycopg2
 import os
 import threading
+import time
 from datetime import datetime
 from scanner import get_all_urls, scan_page
 
@@ -13,6 +14,8 @@ TARGET_DOMAIN = "https://vkmspor.com"
 SCANNING = False
 CURRENT_URL = ""
 LOGS = []
+TOTAL_URLS = 0
+CURRENT_INDEX = 0
 
 # ---------------- DATABASE ----------------
 
@@ -85,45 +88,50 @@ def get_all_codes():
     conn.close()
     return rows
 
-# ---------------- SCANNER ----------------
+# ---------------- SCANNER LOOP ----------------
 
 def run_scan():
-    global SCANNING, CURRENT_URL, LOGS
+    global SCANNING, CURRENT_URL, LOGS, TOTAL_URLS, CURRENT_INDEX
 
     if SCANNING:
         return
 
     SCANNING = True
-    LOGS.append("Tarama başlatıldı...")
+    LOGS.append("Sürekli tarama başlatıldı...")
 
-    try:
-        urls = get_all_urls(TARGET_DOMAIN)
+    while SCANNING:
+        try:
+            urls = get_all_urls(TARGET_DOMAIN)
+            TOTAL_URLS = len(urls)
+            CURRENT_INDEX = 0
 
-        for url in urls:
+            for url in urls:
+                CURRENT_INDEX += 1
+                CURRENT_URL = url
 
-            CURRENT_URL = url
-            LOGS.append(f"Taranıyor: {url}")
+                LOGS.append(f"[{CURRENT_INDEX}/{TOTAL_URLS}] Taranıyor")
 
-            if url_already_scanned(url):
-                LOGS.append("Atlandı (zaten taranmış)")
-                continue
+                if not url_already_scanned(url):
 
-            result = scan_page(url)
+                    result = scan_page(url)
 
-            if result:
-                code, source_url = result
-                save_code(code, source_url)
-                LOGS.append(f"Yeni kod bulundu: {code}")
+                    if result:
+                        code, source_url = result
+                        save_code(code, source_url)
+                        LOGS.append(f"Yeni kod: {code}")
 
-            mark_url_scanned(url)
+                    mark_url_scanned(url)
 
-        LOGS.append("Tarama tamamlandı.")
+                time.sleep(0.5)
 
-    except Exception as e:
-        LOGS.append(f"Hata: {e}")
+            LOGS.append("Tur tamamlandı. 60 saniye bekleniyor...")
+            LOGS = LOGS[-100:]
+            time.sleep(60)
 
-    SCANNING = False
-    LOGS = LOGS[-100:]  # Son 100 log tutulur
+        except Exception as e:
+            LOGS.append(f"Hata: {e}")
+            LOGS = LOGS[-100:]
+            time.sleep(10)
 
 # ---------------- ROUTES ----------------
 
@@ -148,17 +156,17 @@ def status():
         "last_url": last[1],
         "total": len(codes),
         "codes": codes,
-        "logs": LOGS
+        "logs": LOGS,
+        "total_urls": TOTAL_URLS,
+        "current_index": CURRENT_INDEX
     })
 
 @app.route("/download")
 def download():
     codes = get_all_codes()
-
     with open("codes.txt", "w") as f:
         for code, url in codes:
             f.write(f"{code}\n")
-
     return send_file("codes.txt", as_attachment=True)
 
 # ---------------- START ----------------
