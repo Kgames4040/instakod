@@ -109,7 +109,7 @@ def run_scan():
                 CURRENT_INDEX += 1
                 CURRENT_URL = url
 
-                LOGS.append(f"[{CURRENT_INDEX}/{TOTAL_URLS}] Taranıyor")
+                LOGS.append(f"[{CURRENT_INDEX}/{TOTAL_URLS}] Taranıyor: {url}")
 
                 if not url_already_scanned(url):
 
