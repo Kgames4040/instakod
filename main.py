@@ -11,11 +11,17 @@ app = Flask(__name__)
 DATABASE_URL = os.environ.get("DATABASE_URL")
 TARGET_DOMAIN = "https://vkmspor.com"
 
+# -------- GLOBAL STATE --------
+
 SCANNING = False
+SITEMAP_UPDATER_RUNNING = False
+
 CURRENT_URL = ""
 LOGS = []
 TOTAL_URLS = 0
 CURRENT_INDEX = 0
+
+lock = threading.Lock()
 
 # ---------------- DATABASE ----------------
 
@@ -88,49 +94,83 @@ def get_all_codes():
     conn.close()
     return rows
 
+# ---------------- SITEMAP UPDATER ----------------
+
+def update_sitemap_count():
+    global TOTAL_URLS, SITEMAP_UPDATER_RUNNING
+
+    if SITEMAP_UPDATER_RUNNING:
+        return
+
+    SITEMAP_UPDATER_RUNNING = True
+
+    while True:
+        try:
+            urls = get_all_urls(TARGET_DOMAIN)
+
+            with lock:
+                TOTAL_URLS = len(urls)
+                LOGS.append(f"Sitemap güncellendi: {TOTAL_URLS} URL")
+
+            time.sleep(300)  # 5 dakika
+
+        except Exception as e:
+            with lock:
+                LOGS.append(f"Sitemap hata: {e}")
+            time.sleep(60)
+
 # ---------------- SCANNER LOOP ----------------
 
 def run_scan():
-    global SCANNING, CURRENT_URL, LOGS, TOTAL_URLS, CURRENT_INDEX
+    global SCANNING, CURRENT_URL, CURRENT_INDEX
 
     if SCANNING:
         return
 
     SCANNING = True
-    LOGS.append("Sürekli tarama başlatıldı...")
 
-    while SCANNING:
+    with lock:
+        LOGS.append("Sürekli tarama başlatıldı...")
+
+    while True:
         try:
             urls = get_all_urls(TARGET_DOMAIN)
-            TOTAL_URLS = len(urls)
-            CURRENT_INDEX = 0
+
+            with lock:
+                CURRENT_INDEX = 0
+                TOTAL_URLS = len(urls)
 
             for url in urls:
-                CURRENT_INDEX += 1
-                CURRENT_URL = url
-
-                LOGS.append(f"[{CURRENT_INDEX}/{TOTAL_URLS}] Taranıyor: {url}")
+                with lock:
+                    CURRENT_INDEX += 1
+                    CURRENT_URL = url
+                    LOGS.append(
+                        f"[{CURRENT_INDEX}/{TOTAL_URLS}] Taranıyor: {url}"
+                    )
+                    LOGS[:] = LOGS[-100:]
 
                 if not url_already_scanned(url):
-
                     result = scan_page(url)
 
                     if result:
                         code, source_url = result
                         save_code(code, source_url)
-                        LOGS.append(f"Yeni kod: {code}")
+
+                        with lock:
+                            LOGS.append(f"Yeni kod bulundu: {code}")
 
                     mark_url_scanned(url)
 
-                time.sleep(0.5)
+                time.sleep(0.4)
 
-            LOGS.append("Tur tamamlandı. 60 saniye bekleniyor...")
-            LOGS = LOGS[-100:]
+            with lock:
+                LOGS.append("Tur tamamlandı. 60 saniye bekleniyor...")
+
             time.sleep(60)
 
         except Exception as e:
-            LOGS.append(f"Hata: {e}")
-            LOGS = LOGS[-100:]
+            with lock:
+                LOGS.append(f"Tarama hata: {e}")
             time.sleep(10)
 
 # ---------------- ROUTES ----------------
@@ -141,7 +181,7 @@ def index():
 
 @app.route("/start")
 def start_scan():
-    threading.Thread(target=run_scan).start()
+    threading.Thread(target=run_scan, daemon=True).start()
     return jsonify({"status": "started"})
 
 @app.route("/status")
@@ -164,14 +204,19 @@ def status():
 @app.route("/download")
 def download():
     codes = get_all_codes()
+
     with open("codes.txt", "w") as f:
-        for code, url in codes:
+        for code, _ in codes:
             f.write(f"{code}\n")
+
     return send_file("codes.txt", as_attachment=True)
 
 # ---------------- START ----------------
 
 init_db()
+
+# 🔥 Render güvenli başlatma
+threading.Thread(target=update_sitemap_count, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
