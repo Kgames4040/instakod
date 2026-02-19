@@ -52,7 +52,7 @@
             margin-bottom: 5px;
         }
 
-        /* 🔥 Mobilde kopyala menüsü kaybolmaması için */
+        /* Mobil kopyalama sabit */
         .code-item {
             padding: 10px;
             border-bottom: 1px solid #003322;
@@ -152,6 +152,25 @@
 
 <script>
 let knownCodes = new Set();
+let initialized = false;
+
+function renderInitialList(codes) {
+    const container = document.getElementById("allCodes");
+    container.innerHTML = "";
+
+    // Backend zaten DESC döndürüyor ama garanti olsun diye ters çevirip
+    // en yeni kodu en üste koyuyoruz
+    codes.forEach(c => {
+        const code = c[0];
+        knownCodes.add(code);
+
+        const div = document.createElement("div");
+        div.className = "code-item";
+        div.textContent = code;
+
+        container.appendChild(div);
+    });
+}
 
 function updatePanel() {
     fetch("/status")
@@ -162,7 +181,7 @@ function updatePanel() {
             document.getElementById("scanStatus").innerText =
                 data.scanning ? "AKTİF TARAMA" : "BEKLİYOR";
 
-            // Aktif URL (canlı)
+            // Aktif URL
             document.getElementById("currentUrl").innerText =
                 data.current_url || "Yok";
 
@@ -173,28 +192,36 @@ function updatePanel() {
             document.getElementById("lastUrl").innerText =
                 data.last_url || "Yok";
 
-            // Kod sayacı
+            // Sayaçlar
             document.getElementById("totalCount").innerText =
                 data.total || 0;
 
-            // Sitemap URL sayısı (anlık)
             document.getElementById("totalUrls").innerText =
                 data.total_urls || 0;
 
-            // İlerleme (kaçıncı url taranıyor)
             document.getElementById("progress").innerText =
                 (data.current_index || 0) + " / " + (data.total_urls || 0);
 
-            // Log akışı (URL'ler dahil)
+            // Loglar (URL'ler geri dahil)
             document.getElementById("logs").innerHTML =
                 (data.logs || []).slice(-40).map(l =>
                     "<div class='log'>• " + l + "</div>"
                 ).join("");
 
-            // 🔥 SADECE YENİ KODLARI EKLE (liste resetlenmez)
+            const codes = data.codes || [];
             const container = document.getElementById("allCodes");
-            (data.codes || []).forEach(c => {
+
+            // İlk yüklemede listeyi doğru sırayla bas
+            if (!initialized) {
+                renderInitialList(codes);
+                initialized = true;
+                return;
+            }
+
+            // Sonradan sadece YENİ kodları en üste ekle
+            codes.forEach(c => {
                 const code = c[0];
+
                 if (!knownCodes.has(code)) {
                     knownCodes.add(code);
 
@@ -202,14 +229,13 @@ function updatePanel() {
                     div.className = "code-item";
                     div.textContent = code;
 
-                    // En üste ekle (yeni kodlar yukarıda)
+                    // Yeni kod her zaman EN ÜSTTE
                     container.prepend(div);
                 }
             });
         });
 }
 
-// 1 saniyede bir güncelle (canlı tarama hissi)
 setInterval(updatePanel, 1000);
 updatePanel();
 </script>
