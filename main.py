@@ -16,6 +16,7 @@ CURRENT_URL = ""
 LOGS = []
 TOTAL_URLS = 0
 CURRENT_INDEX = 0
+SCAN_THREAD = None
 
 # ---------------- DATABASE ----------------
 
@@ -88,7 +89,7 @@ def get_all_codes():
     conn.close()
     return rows
 
-# ---------------- SCANNER LOOP ----------------
+# ---------------- SCANNER LOOP (STABLE) ----------------
 
 def run_scan():
     global SCANNING, CURRENT_URL, LOGS, TOTAL_URLS, CURRENT_INDEX
@@ -99,11 +100,15 @@ def run_scan():
     SCANNING = True
     LOGS.append("Sürekli tarama başlatıldı...")
 
-    while SCANNING:
+    while True:
         try:
+            # Sitemap URL'leri çek (her tur güncellenir)
             urls = get_all_urls(TARGET_DOMAIN)
+
             TOTAL_URLS = len(urls)
             CURRENT_INDEX = 0
+
+            LOGS.append(f"Sitemap bulundu: {TOTAL_URLS} URL")
 
             for url in urls:
                 CURRENT_INDEX += 1
@@ -111,26 +116,38 @@ def run_scan():
 
                 LOGS.append(f"[{CURRENT_INDEX}/{TOTAL_URLS}] Taranıyor: {url}")
 
-                if not url_already_scanned(url):
+                # Daha önce tarandıysa atla (performans)
+                if url_already_scanned(url):
+                    continue
 
-                    result = scan_page(url)
+                result = scan_page(url)
 
-                    if result:
-                        code, source_url = result
-                        save_code(code, source_url)
-                        LOGS.append(f"Yeni kod: {code}")
+                if result:
+                    code, source_url = result
+                    save_code(code, source_url)
+                    LOGS.append(f"Yeni kod bulundu: {code}")
 
-                    mark_url_scanned(url)
+                mark_url_scanned(url)
 
-                time.sleep(0.5)
+                # Render timeout yememek için küçük sleep
+                time.sleep(0.3)
 
-            LOGS.append("Tur tamamlandı. 60 saniye bekleniyor...")
-            LOGS = LOGS[-100:]
+            LOGS.append("Tur tamamlandı. 60 saniye sonra yeniden sitemap güncellenecek...")
+
+            # Log şişmesini engelle (son 100 log)
+            if len(LOGS) > 100:
+                LOGS = LOGS[-100:]
+
+            # 60 saniye bekle sonra tekrar sitemap çek (senin istediğin 5dk yerine daha canlı)
             time.sleep(60)
 
         except Exception as e:
-            LOGS.append(f"Hata: {e}")
-            LOGS = LOGS[-100:]
+            LOGS.append(f"KRITIK HATA: {str(e)}")
+
+            if len(LOGS) > 100:
+                LOGS = LOGS[-100:]
+
+            # Hata olursa sistem durmasın
             time.sleep(10)
 
 # ---------------- ROUTES ----------------
@@ -141,7 +158,14 @@ def index():
 
 @app.route("/start")
 def start_scan():
-    threading.Thread(target=run_scan).start()
+    global SCAN_THREAD
+
+    # Aynı anda birden fazla thread açılmasını engeller
+    if SCAN_THREAD is None or not SCAN_THREAD.is_alive():
+        SCAN_THREAD = threading.Thread(target=run_scan, daemon=True)
+        SCAN_THREAD.start()
+        LOGS.append("Tarama thread başlatıldı (Render uyumlu daemon mod)")
+
     return jsonify({"status": "started"})
 
 @app.route("/status")
@@ -164,12 +188,15 @@ def status():
 @app.route("/download")
 def download():
     codes = get_all_codes()
-    with open("codes.txt", "w") as f:
-        for code, url in codes:
-            f.write(f"{code}\n")
-    return send_file("codes.txt", as_attachment=True)
 
-# ---------------- START ----------------
+    file_path = "codes.txt"
+    with open(file_path, "w", encoding="utf-8") as f:
+        for code, _ in codes:  # URL yazmaz, sadece kod
+            f.write(f"{code}\n")
+
+    return send_file(file_path, as_attachment=True)
+
+# ---------------- STARTUP ----------------
 
 init_db()
 
